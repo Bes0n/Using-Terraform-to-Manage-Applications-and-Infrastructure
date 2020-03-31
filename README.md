@@ -75,7 +75,9 @@ In this lesson, we will create a Docker Swarm cluster and install Terraform. We 
 These actions will be executed on both the Swarm manager and worker nodes.
 
 #### Update the operating system
-`sudo yum update -y`
+```
+sudo yum update -y
+```
 
 #### Prerequisites
 Uninstall old versions:
@@ -121,7 +123,7 @@ sudo usermod -aG docker cloud_user
 ```
   
 Test the Docker installation:
-`docker --version`
+```docker --version```
 
 #### Configuring Swarm Manager node
 On the manager node, initialize the manager:
