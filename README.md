@@ -1,4 +1,4 @@
-# Using-Terraform-to-Manage-Applications-and-Infrastructure
+# Using Terraform to Manage Applications and Infrastructure
   
 
 - [About Terraform](#about-terraform)
@@ -7,7 +7,7 @@
     - [Setting up Docker Installing Terraform](#setting-up-docker-installing-terraform)
 - [Terraform Basics](#terraform-basics)
     - [Terraform Commands](#terraform-commands)
-  
+    - [HashiCorp Configuration Language](#hashicorp-configuration-language)
 
 ## About Terraform
 - Terraform is a tool for building infrastructure
@@ -255,3 +255,176 @@ Show the Docker Image resource:
   
 Destroy the resource once again:
 `terraform destroy`
+
+### HashiCorp Configuration Language
+In this lesson, we will cover the basics of the Terraform configuration language, as well as explore providers and resources. Continuing what we started in Terraform Commands, we will modify `main.tf` so we can deploy a Ghost container to Docker.
+  
+The syntax of Terraform configurations is called HashiCorp Configuration Language (HCL). It is meant to strike a balance between being human-readable and editable, and being machine-friendly. For machine-friendliness, Terraform can also read JSON configurations. For general Terraform configurations, however, we recommend using the HCL Terraform syntax.
+
+#### Terraform code files
+The Terraform language uses configuration files that are named with the `.tf` file extension. There is also a JSON-based variant of the language that is named with the `.tf.json` file extension.
+
+#### Terraform Syntax
+Here is an example of Terraform's HCL syntax:
+```
+resource "aws_instance" "example" {
+  ami = "abc123"
+
+  network_interface {
+    # ...
+  }
+}
+```
+
+#### Syntax reference:
+- Single line comments start with `#`.
+- Multi-line comments are wrapped with `/*` and `*/`.
+- Values are assigned with the syntax of `key = value`.
+- Strings are in double-quotes.
+- Strings can interpolate other values using syntax wrapped in `${}`, for example `${var.foo}`.
+- Numbers are assumed to be base 10.
+- Boolean values: true, false
+- Lists of primitive types can be made with square brackets (`[]`), for example `["foo", "bar", "baz"]`.
+- Maps can be made with braces (`{}`) and colons (`:`), for example `{ "foo": "bar", "bar": "baz" }`.
+
+#### Style Conventions:
+- Indent two spaces for each nesting level.
+- With multiple arguments, align their equals signs.
+  
+Setup the environment:
+`cd terraform/basics`
+
+#### Deploying a container using Terraform
+Redeploy the Ghost image: `terraform apply`
+  
+Confirm the apply by typing **yes**. The `apply` will take a bit to complete.
+  
+Open `main.tf`: `vi main.tf`
+  
+`main.tf` contents:
+```
+# Download the latest Ghost image
+resource "docker_image" "image_id" {
+  name = "ghost:latest"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "ghost_blog"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "2368"
+    external = "80"
+  }
+}
+```
+  
+Validate `main.tf`: `terraform validate`
+  
+Terraform Plan: `terraform plan`
+  
+Apply the changes to `main.tf`: `terraform apply`
+  
+Confirm the `apply` by typing **yes**.
+  
+List the Docker containers: `docker container ls`
+  
+Access the Ghost blog by opening a browser and go to: `http:://[SWARM_MANAGER_IP]`
+  
+#### Cleaning up the environment
+Reset the environment: `terraform destroy`
+  
+Confirm the `destroy` by typing **yes**.
+  
+### Tainting and Updating Resources
+In this lesson, we are going to take a look at how to force a redeploy of resources using tainting. This is an extremely useful skill for when parts of a deployment need to be modified.
+
+#### Tainting and Untainting Resources
+Terraform commands:
+  
+- `taint`: Manually mark a resource for recreation 
+- `untaint`: Manually unmark a resource as tainted
+  
+Tainting a resource: `terraform taint [NAME]`
+  
+Untainting a resource: `terraform untaint [NAME]`
+  
+Set up the environment: `cd terraform/basics`
+  
+Redeploy the Ghost image: `terraform apply`
+  
+Taint the Ghost blog resource: `terraform taint docker_container.container_id`
+  
+See what will be changed: `terraform plan`
+  
+Remove the taint on the Ghost blog resource: `terraform untaint docker_container.container_id`
+  
+Verity that the Ghost blog resource is untainted: `terraform plan`
+  
+#### Updating Resources
+Let's edit `main.tf` and change the image to `ghost:alpine`.
+  
+Open `main.tf`: `vi main.tf`
+  
+`main.tf` contents:
+```
+# Download the latest Ghost image
+resource "docker_image" "image_id" {
+  name = "ghost:alpine"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "ghost_blog"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "2368"
+    external = "80"
+  }
+}
+```
+  
+Validate changes made to `main.tf`: `terraform validate`
+  
+See what changes will be applied: `terraform plan`
+  
+Apply image changes: `terraform apply`
+  
+List the Docker containers: `docker container ls`
+  
+See what image Ghost is using: `docker image ls | grep [IMAGE]`
+  
+Check again to see what changes will be applied: `terraform plan`
+  
+Apply container changes: `terraform apply`
+  
+See what image Ghost is now using: `docker image ls | grep [IMAGE]`
+
+#### Cleaning up the environment
+Reset the environment: `terraform destroy`
+  
+Confirm the `destroy` by typing **yes**.
+  
+List the Docker images: `docker image ls`
+  
+Remove the Ghost blog image: `docker image rm ghost:latest`
+  
+Reset `main.tf`: `vi main.tf`
+  
+`main.tf` contents:
+```
+# Download the latest Ghost image
+resource "docker_image" "image_id" {
+  name = "ghost:latest"
+}
+
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "ghost_blog"
+  image = "${docker_image.image_id.latest}"
+  ports {
+    internal = "2368"
+    external = "80"
+  }
+}
+```
