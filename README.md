@@ -143,7 +143,9 @@ docker swarm join --token [TOKEN] \
 
 #### Verify the Swarm cluster
 List Swarm nodes:
-`docker node ls`
+```
+docker node ls
+```
 
 #### Install Terraform
 Install Terraform 0.11.13 on the Swarm manager:
@@ -154,14 +156,18 @@ sudo unzip terraform_0.11.13_linux_amd64.zip -d /usr/local/bin/
 ```
   
 Test the Terraform installation:
-`terraform version`
+```
+terraform version
+```
 
 ## Terraform Basics
 ### Terraform Commands
 In this lesson, we begin working with Terraform commands. We will start by creating a very simple Terraform file that will pull down the an image from Docker Hub.
   
 List the Terraform commands:
-`terraform`
+```
+terraform
+```
   
 **Common commands:**
 - `apply`: Builds or changes infrastructure
@@ -204,26 +210,38 @@ resource "docker_image" "image_id" {
 ```
   
 Initialize Terraform:
-`terraform init`
+```
+terraform init
+```
   
 Validate the Terraform file:
-`terraform validate`
+```
+terraform validate
+```
   
 List providers in the folder:
-`ls .terraform/plugins/linux_amd64/`
+```
+ls .terraform/plugins/linux_amd64/
+```
 
 List providers used in the configuration:
-`terraform providers`
+```
+terraform providers
+```
   
 Terraform Plan:
-`terraform plan`
+```
+terraform plan
+```
   
 Useful flags for plan:
 - `-out=path`: Writes a plan file to the given path. This can be used as input to the "apply" command.
 - `-var 'foo=bar'`: Set a variable in the Terraform configuration. This flag can be set multiple times.
   
 Terraform Apply:
-`terraform apply`
+```
+terraform apply
+```
   
 Useful flags for `apply`:
 - `-auto-approve`: This skips interactive approval of plan before applying.
@@ -232,13 +250,19 @@ Useful flags for `apply`:
 Confirm your apply by typing **yes**. The apply will take a bit to complete.
   
 List the Docker images:
-`docker image ls`
+```
+docker image ls
+```
   
 Terraform Show:
-`terraform show`
+```
+terraform show
+```
   
 Terraform Destroy:
-`terraform destroy`
+```
+terraform destroy
+```
   
 Confirm your `destroy` by typing **yes**.
   
@@ -246,19 +270,29 @@ Useful flags for destroys:
 - `-auto-approve`: Skip interactive approval of plan before applying.
   
 Re-list the Docker images:
-`docker image ls`
+```
+docker image ls
+```
   
 Using a plan:
-`terraform plan -out=tfplan`
+```
+terraform plan -out=tfplan
+```
   
 Applying a plan:
-`terraform apply tfplan`
+```
+terraform apply tfplan
+```
   
 Show the Docker Image resource:
-`terraform show`
+```
+terraform show
+```
   
 Destroy the resource once again:
-`terraform destroy`
+```
+terraform destroy
+```
 
 ### HashiCorp Configuration Language
 In this lesson, we will cover the basics of the Terraform configuration language, as well as explore providers and resources. Continuing what we started in Terraform Commands, we will modify `main.tf` so we can deploy a Ghost container to Docker.
@@ -296,14 +330,21 @@ resource "aws_instance" "example" {
 - With multiple arguments, align their equals signs.
   
 Setup the environment:
-`cd terraform/basics`
+```cd terraform/basics
+```
 
 #### Deploying a container using Terraform
-Redeploy the Ghost image: `terraform apply`
+Redeploy the Ghost image: 
+```
+terraform apply
+```
   
 Confirm the apply by typing **yes**. The `apply` will take a bit to complete.
   
-Open `main.tf`: `vi main.tf`
+Open `main.tf`: 
+```
+vi main.tf
+```
   
 `main.tf` contents:
 ```
@@ -323,20 +364,38 @@ resource "docker_container" "container_id" {
 }
 ```
   
-Validate `main.tf`: `terraform validate`
+Validate `main.tf`:
+```
+terraform validate
+```
   
-Terraform Plan: `terraform plan`
+Terraform Plan: 
+```
+terraform plan
+```
   
-Apply the changes to `main.tf`: `terraform apply`
+Apply the changes to `main.tf`: 
+```
+terraform apply
+```
   
 Confirm the `apply` by typing **yes**.
   
-List the Docker containers: `docker container ls`
+List the Docker containers: 
+```
+docker container ls
+```
   
-Access the Ghost blog by opening a browser and go to: `http:://[SWARM_MANAGER_IP]`
+Access the Ghost blog by opening a browser and go to: 
+```
+http:://[SWARM_MANAGER_IP]
+```
   
 #### Cleaning up the environment
-Reset the environment: `terraform destroy`
+Reset the environment: 
+```
+terraform destroy
+```
   
 Confirm the `destroy` by typing **yes**.
   
@@ -349,26 +408,53 @@ Terraform commands:
 - `taint`: Manually mark a resource for recreation 
 - `untaint`: Manually unmark a resource as tainted
   
-Tainting a resource: `terraform taint [NAME]`
+Tainting a resource: 
+```
+terraform taint [NAME]
+```
   
-Untainting a resource: `terraform untaint [NAME]`
+Untainting a resource: 
+```
+terraform untaint [NAME]
+```
   
-Set up the environment: `cd terraform/basics`
+Set up the environment: 
+```
+cd terraform/basics
+```
   
-Redeploy the Ghost image: `terraform apply`
+Redeploy the Ghost image: 
+```
+terraform apply
+```
   
-Taint the Ghost blog resource: `terraform taint docker_container.container_id`
+Taint the Ghost blog resource: 
+```
+terraform taint docker_container.container_id
+```
   
-See what will be changed: `terraform plan`
+See what will be changed: 
+```
+terraform plan
+```
   
-Remove the taint on the Ghost blog resource: `terraform untaint docker_container.container_id`
+Remove the taint on the Ghost blog resource: 
+```
+terraform untaint docker_container.container_id
+```
   
-Verity that the Ghost blog resource is untainted: `terraform plan`
+Verity that the Ghost blog resource is untainted: 
+```
+terraform plan
+```
   
 #### Updating Resources
 Let's edit `main.tf` and change the image to `ghost:alpine`.
   
-Open `main.tf`: `vi main.tf`
+Open `main.tf`: 
+```
+vi main.tf
+```
   
 `main.tf` contents:
 ```
@@ -390,30 +476,63 @@ resource "docker_container" "container_id" {
   
 Validate changes made to `main.tf`: `terraform validate`
   
-See what changes will be applied: `terraform plan`
+See what changes will be applied: 
+```
+terraform plan
+```
   
-Apply image changes: `terraform apply`
+Apply image changes: 
+```
+terraform apply
+```
   
-List the Docker containers: `docker container ls`
+List the Docker containers: 
+```
+docker container ls
+```
   
-See what image Ghost is using: `docker image ls | grep [IMAGE]`
+See what image Ghost is using: 
+```
+docker image ls | grep [IMAGE]
+```
   
-Check again to see what changes will be applied: `terraform plan`
+Check again to see what changes will be applied: 
+```
+terraform plan
+```
   
-Apply container changes: `terraform apply`
+Apply container changes: 
+```
+terraform apply
+```
   
-See what image Ghost is now using: `docker image ls | grep [IMAGE]`
+See what image Ghost is now using: 
+```
+docker image ls | grep [IMAGE]
+```
 
 #### Cleaning up the environment
-Reset the environment: `terraform destroy`
+Reset the environment: 
+```
+terraform destroy
+```
   
 Confirm the `destroy` by typing **yes**.
   
-List the Docker images: `docker image ls`
+List the Docker images: 
+```
+docker image ls
+```
   
-Remove the Ghost blog image: `docker image rm ghost:latest`
+Remove the Ghost blog image: 
+```
+docker image rm ghost:latest
+```
   
-Reset `main.tf`: `vi main.tf`
+Reset `main.tf`: 
+```
+vi main.tf
+```
   
 `main.tf` contents:
 ```
@@ -432,3 +551,4 @@ resource "docker_container" "container_id" {
   }
 }
 ```
+
