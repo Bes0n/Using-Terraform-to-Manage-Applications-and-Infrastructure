@@ -123,7 +123,9 @@ sudo usermod -aG docker cloud_user
 ```
   
 Test the Docker installation:
-```docker --version```
+```
+docker --version
+```
 
 #### Configuring Swarm Manager node
 On the manager node, initialize the manager:
