@@ -13,7 +13,7 @@
     - [Breaking Out Our Variables and Outputs](#breaking-out-our-variables-and-outputs)  
     - [Maps and Lookups](#maps-and-lookups)
     - [Terraform Workspaces](#terraform-workspaces)
-
+- [Terraform Modules](#terraform-modules)
 
 ## About Terraform
 - Terraform is a tool for building infrastructure
@@ -1122,3 +1122,6 @@ Destroy the deployment:
 ```
 terraform destroy -auto-approve -var env=dev
 ```
+
+### Terraform Modules
+![img](https://github.com/Bes0n/EX407-Ansible-Automation/blob/master/images/img1.png)
