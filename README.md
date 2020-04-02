@@ -1124,4 +1124,22 @@ terraform destroy -auto-approve -var env=dev
 ```
 
 ### Terraform Modules
-![img](https://github.com/Bes0n/EX407-Ansible-Automation/blob/master/images/img1.png)
+![img](https://github.com/Bes0n/Using-Terraform-to-Manage-Applications-and-Infrastructure/blob/master/images/img1.png)
+  
+Set up the environment:
+```
+mkdir -p modules/image
+mkdir -p modules/container
+```
+
+Create files for the image:
+```
+cd ~/terraform/basics/modules/image
+touch main.tf variables.tf outputs.tf
+```
+
+Create files for container:
+```
+cd ~/terraform/basics/modules/container
+touch main.tf variables.tf outputs.tf
+```
