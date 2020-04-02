@@ -14,6 +14,11 @@
     - [Maps and Lookups](#maps-and-lookups)
     - [Terraform Workspaces](#terraform-workspaces)
 - [Terraform Modules](#terraform-modules)
+    - [Introduction to Modules](#introduction-to-modules)
+    - [The Image Module](#the-image-module)
+    - [The Container Module](#the-container-module)
+    - [The Root Module](#the-root-module)
+  
 
 ## About Terraform
 - Terraform is a tool for building infrastructure
@@ -1123,7 +1128,8 @@ Destroy the deployment:
 terraform destroy -auto-approve -var env=dev
 ```
 
-### Terraform Modules
+## Terraform Modules
+### Introduction to Modules
 ![img](https://github.com/Bes0n/Using-Terraform-to-Manage-Applications-and-Infrastructure/blob/master/images/img1.png)
   
 Set up the environment:
@@ -1142,4 +1148,235 @@ Create files for container:
 ```
 cd ~/terraform/basics/modules/container
 touch main.tf variables.tf outputs.tf
+```
+
+### The Image Module
+Go to the image directory:
+```
+cd ~/terraform/basics/modules/image
+```
+
+Edit `main.tf`:
+```
+vi main.tf
+```
+
+`main.tf` contents:
+```
+# Download the Image
+resource "docker_image" "image_id" {
+  name = "${var.image_name}"
+}
+```
+
+Edit `variables.tf`:
+```
+vi variables.tf
+```
+
+`variables.tf` contents:
+```
+variable "image_name" {
+  description = "Name of the image"
+}
+```
+
+Edit `outputs.tf`:
+```
+vi outputs.tf
+```
+
+`outputs.tf`: contents:
+```
+output "image_out" {
+  value       = "${docker_image.image_id.latest}"
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Create the image plan:
+```
+terraform plan -out=tfplan -var 'image_name=ghost:alpine'
+```
+
+Deploy the image using the plan:
+```
+terraform apply -auto-approve tfplan
+```
+
+Destroy the image:
+```
+terraform destroy -auto-approve -var 'image_name=ghost:alpine'
+```
+
+### The Container Module
+Go to the container directory:
+```
+cd ~/terraform/basics/modules/container
+```
+
+Edit `main.tf`:
+```
+vi main.tf
+```
+
+`main.tf` contents:
+```
+# Start the Container
+resource "docker_container" "container_id" {
+  name  = "${var.container_name}"
+  image = "${var.image}"
+  ports {
+    internal = "${var.int_port}"
+    external = "${var.ext_port}"
+  }
+}
+```
+
+Edit `variables.tf`:
+```
+vi variables.tf
+```
+
+`variables.tf` contents:
+```
+#Define variables
+variable "container_name" {}
+variable "image" {}
+variable "int_port" {}
+variable "ext_port" {}
+```
+
+Edit `outputs.tf`:
+```
+vi outputs.tf
+```
+
+`outputs.tf` contents:
+```
+#Output the IP Address of the Container
+output "ip" {
+  value = "${docker_container.container_id.ip_address}"
+}
+
+output "container_name" {
+  value = "${docker_container.container_id.name}"
+}
+```
+
+Initialize:
+```
+terraform init
+```
+
+Create the image plan:
+```
+terraform plan -out=tfplan -var 'container_name=blog' -var 'image=ghost:alpine' -var 'int_port=2368' -var 'ext_port=80'
+```
+
+Deploy container using the plan:
+```
+terraform apply tfplan
+```
+
+### The Root Module
+In this lesson we will refactor the `root` module to use the image and container modules we created in the previous two lessons.
+
+Go to the module directory:
+```
+cd ~/terraform/basics/modules/
+```
+  
+```
+touch {main.tf,variables.tf,outputs.tf}
+```
+
+Edit `main.tf`:
+```
+vi main.tf
+```
+
+`main.tf` contents:
+```
+# Download the image
+module "image" {
+  source = "./image"
+  image_name  = "${var.image_name}"
+}
+
+# Start the container
+module "container" {
+  source             = "./container"
+  image              = "${module.image.image_out}"
+  container_name     = "${var.container_name}"
+  int_port           = "${var.int_port}"
+  ext_port           = "${var.ext_port}"
+}
+```
+
+Edit `variables.tf`:
+```
+vi variables.tf
+```
+
+`variables.tf` contents:
+```
+#Define variables
+variable "container_name" {
+  description = "Name of the container."
+  default     = "blog"
+}
+variable "image_name" {
+  description = "Image for container."
+  default     = "ghost:latest"
+}
+variable "int_port" {
+  description = "Internal port for container."
+  default     = "2368"
+}
+variable "ext_port" {
+  description = "External port for container."
+  default     = "80"
+}
+```
+
+Edit `outputs.tf`:
+```
+vi outputs.tf
+```
+
+`outputs.tf` contents:
+```
+#Output the IP Address of the Container
+output "ip" {
+  value = "${module.container.ip}"
+}
+
+output "container_name" {
+  value = "${module.container.container_name}"
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Create the image plan:
+```
+terraform plan -out=tfplan
+```
+
+Deploy the container using the plan:
+```
+terraform apply tfplan
+```
+
+Destroy the deployment:
+```
+terraform destroy -auto-approve
 ```
