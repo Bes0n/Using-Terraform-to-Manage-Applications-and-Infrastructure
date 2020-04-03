@@ -18,6 +18,11 @@
     - [The Image Module](#the-image-module)
     - [The Container Module](#the-container-module)
     - [The Root Module](#the-root-module)
+- [Terraform and Docker](#terraform-and-docker)  
+    - [Managing Docker Networks](#managing-docker-networks)
+    - [Managing Docker Volumes](#managing-docker-volumes)
+    - [Creating Swarm Services](#creating-swarm-services)
+    - [Using Secrets](#using-secrets)
   
 
 ## About Terraform
@@ -1377,6 +1382,673 @@ terraform apply tfplan
 ```
 
 Destroy the deployment:
+```
+terraform destroy -auto-approve
+```
+  
+
+## Terraform and Docker
+### Managing Docker Networks
+In this lesson we will build on our knowledge of Terraform and Docker by learning about the `docker_network` resource.
+  
+Set up the environment:
+```
+mkdir -p ~/terraform/docker/networks
+cd terraform/docker/networks
+```
+
+Create the files:
+```
+touch {variables.tf,image.tf,network.tf,main.tf}
+```
+
+Edit variables.tf:
+```
+vi variables.tf
+```
+
+`variables.tf` contents:
+```
+variable "mysql_root_password" {
+  description = "The MySQL root password."
+  default     = "P4sSw0rd0!"
+}
+
+variable "ghost_db_username" {
+  description = "Ghost blog database username."
+  default     = "root"
+}
+
+variable "ghost_db_name" {
+  description = "Ghost blog database name."
+  default     = "ghost"
+}
+
+variable "mysql_network_alias" {
+  description = "The network alias for MySQL."
+  default     = "db"
+}
+
+variable "ghost_network_alias" {
+  description = "The network alias for Ghost"
+  default     = "ghost"
+}
+
+variable "ext_port" {
+  description = "Public port for Ghost"
+  default     = "8080"
+}
+```
+
+Edit `image.tf`:
+```
+vi image.tf
+```
+
+`image.tf` contents:
+```
+resource "docker_image" "ghost_image" {
+  name = "ghost:alpine"
+}
+
+resource "docker_image" "mysql_image" {
+  name = "mysql:5.7"
+}
+```
+
+Edit `network.tf`:
+```
+vi network.tf
+```
+
+`network.tf` contents:
+```
+resource "docker_network" "public_bridge_network" {
+  name   = "public_ghost_network"
+  driver = "bridge"
+}
+
+resource "docker_network" "private_bridge_network" {
+  name     = "ghost_mysql_internal"
+  driver   = "bridge"
+  internal = true
+}
+```
+
+Edit `main.tf`:
+```
+vi main.tf
+```
+
+`main.tf` contents:
+```
+resource "docker_container" "blog_container" {
+  name  = "ghost_blog"
+  image = "${docker_image.ghost_image.name}"
+  env   = [
+    "database__client=mysql",
+    "database__connection__host=${var.mysql_network_alias}",
+    "database__connection__user=${var.ghost_db_username}",
+    "database__connection__password=${var.mysql_root_password}",
+    "database__connection__database=${var.ghost_db_name}"
+  ]
+  ports {
+    internal = "2368"
+    external = "${var.ext_port}"
+  }
+  networks_advanced {
+    name    = "${docker_network.public_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+}
+
+resource "docker_container" "mysql_container" {
+  name  = "ghost_database"
+  image = "${docker_image.mysql_image.name}"
+  env   = [
+    "MYSQL_ROOT_PASSWORD=${var.mysql_root_password}"
+  ]
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.mysql_network_alias}"]
+  }
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Validate the files:
+```
+terraform validate
+```
+
+Build a plan:
+```
+terraform plan -out=tfplan -var 'ext_port=8082'
+```
+
+Apply the plan:
+```
+terraform apply tfplan
+```
+
+Destroy the environment:
+```
+terraform destroy -auto-approve -var 'ext_port=8082'
+```
+
+#### Fixing `main.tf`
+`main.tf` contents:
+```
+resource "docker_container" "mysql_container" {
+  name  = "ghost_database"
+  image = "${docker_image.mysql_image.name}"
+  env   = [
+    "MYSQL_ROOT_PASSWORD=${var.mysql_root_password}"
+  ]
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.mysql_network_alias}"]
+  }
+}
+
+resource "null_resource" "sleep" {
+  depends_on = ["docker_container.mysql_container"]
+  provisioner "local-exec" {
+    command = "sleep 15s"
+  }
+}
+
+resource "docker_container" "blog_container" {
+  name  = "ghost_blog"
+  image = "${docker_image.ghost_image.name}"
+  depends_on = ["null_resource.sleep", "docker_container.mysql_container"]
+  env   = [
+    "database__client=mysql",
+    "database__connection__host=${var.mysql_network_alias}",
+    "database__connection__user=${var.ghost_db_username}",
+    "database__connection__password=${var.mysql_root_password}",
+    "database__connection__database=${var.ghost_db_name}"
+  ]
+  ports {
+    internal = "2368"
+    external = "${var.ext_port}"
+  }
+  networks_advanced {
+    name    = "${docker_network.public_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+}
+```
+
+Build a plan:
+```
+terraform plan -out=tfplan -var 'ext_port=8082'
+```
+
+Apply the plan:
+```
+terraform apply tfplan
+```
+
+### Managing Docker Volumes
+In this lesson, we will add a volume to our Ghost Blog/MySQL setup.
+  
+Destroy the existing environment:
+```
+terraform destroy -auto-approve -var 'ext_port=8082'
+```
+
+Setup an environment:
+```
+cp -r ~/terraform/docker/networks ~/terraform/docker/volumes
+cd ../volumes/
+```
+
+Create `volumes.tf`:
+```
+vi volumes.tf
+```
+
+`volumes.tf` contents:
+```
+resource "docker_volume" "mysql_data_volume" {
+  name = "mysql_data"
+}
+```
+
+Edit `main.tf`:
+```
+vi main.tf
+```
+
+`main.tf` contents:
+```
+resource "docker_container" "mysql_container" {
+  name  = "ghost_database"
+  image = "${docker_image.mysql_image.name}"
+  env   = [
+    "MYSQL_ROOT_PASSWORD=${var.mysql_root_password}"
+  ]
+  volumes {
+    volume_name    = "${docker_volume.mysql_data_volume.name}"
+    container_path = "/var/lib/mysql"
+  }
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.mysql_network_alias}"]
+  }
+}
+
+resource "null_resource" "sleep" {
+  depends_on = ["docker_container.mysql_container"]
+  provisioner "local-exec" {
+    command = "sleep 15s"
+  }
+}
+
+resource "docker_container" "blog_container" {
+  name  = "ghost_blog"
+  image = "${docker_image.ghost_image.name}"
+  depends_on = ["null_resource.sleep", "docker_container.mysql_container"]
+  env   = [
+    "database__client=mysql",
+    "database__connection__host=${var.mysql_network_alias}",
+    "database__connection__user=${var.ghost_db_username}",
+    "database__connection__password=${var.mysql_root_password}",
+    "database__connection__database=${var.ghost_db_name}"
+  ]
+  ports {
+    internal = "2368"
+    external = "${var.ext_port}"
+  }
+  networks_advanced {
+    name    = "${docker_network.public_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+  networks_advanced {
+    name    = "${docker_network.private_bridge_network.name}"
+    aliases = ["${var.ghost_network_alias}"]
+  }
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Validate the files:
+```
+terraform validate
+```
+
+Build a plan:
+```
+terraform plan -out=tfplan -var 'ext_port=8082'
+```
+
+Apply the plan:
+```
+terraform apply tfplan
+```
+
+List Docker volumes:
+```
+docker volume inspect mysql_data
+```
+
+List the data in mysql_data:
+```
+sudo ls /var/lib/docker/volumes/mysql_data/_data
+```
+
+Destroy the environment:
+```
+terraform destroy -auto-approve -var 'ext_port=8082'
+```
+
+### Creating Swarm Services
+In this lesson, we will convert our Ghost and MySQL containers over to using Swarm services. Swarm services are a more production-ready way of running containers.
+  
+Setup the environment:
+```
+cp -r volumes/ services
+cd services
+```
+
+`variables.tf` contents:
+```
+variable "mysql_root_password" {
+  description = "The MySQL root password."
+  default     = "P4sSw0rd0!"
+}
+
+variable "ghost_db_username" {
+  description = "Ghost blog database username."
+  default     = "root"
+}
+
+variable "ghost_db_name" {
+  description = "Ghost blog database name."
+  default     = "ghost"
+}
+
+variable "mysql_network_alias" {
+  description = "The network alias for MySQL."
+  default     = "db"
+}
+
+variable "ghost_network_alias" {
+  description = "The network alias for Ghost"
+  default     = "ghost"
+}
+
+variable "ext_port" {
+  description = "The public port for Ghost"
+}
+```
+
+`images.tf` contents:
+```
+resource "docker_image" "ghost_image" {
+  name = "ghost:alpine"
+}
+
+resource "docker_image" "mysql_image" {
+  name = "mysql:5.7"
+}
+```
+
+`network.tf` contents:
+```
+resource "docker_network" "public_bridge_network" {
+  name   = "public_network"
+  driver = "overlay"
+}
+
+resource "docker_network" "private_bridge_network" {
+  name     = "mysql_internal"
+  driver   = "overlay"
+  internal = true
+}
+```
+
+`volumes.tf` contents:
+```
+resource "docker_volume" "mysql_data_volume" {
+  name = "mysql_data"
+}
+```
+
+`main.tf` contents:
+```
+resource "docker_service" "ghost-service" {
+  name = "ghost"
+
+  task_spec {
+    container_spec {
+      image = "${docker_image.ghost_image.name}"
+
+      env {
+         database__client               = "mysql"
+         database__connection__host     = "${var.mysql_network_alias}"
+         database__connection__user     = "${var.ghost_db_username}"
+         database__connection__password = "${var.mysql_root_password}"
+         database__connection__database = "${var.ghost_db_name}"
+      }
+    }
+    networks = [
+      "${docker_network.public_bridge_network.name}",
+      "${docker_network.private_bridge_network.name}"
+    ]
+  }
+
+  endpoint_spec {
+    ports {
+      target_port    = "2368"
+      published_port = "${var.ext_port}"
+    }
+  }
+}
+
+resource "docker_service" "mysql-service" {
+  name = "${var.mysql_network_alias}"
+
+  task_spec {
+    container_spec {
+      image = "${docker_image.mysql_image.name}"
+
+      env {
+        MYSQL_ROOT_PASSWORD = "${var.mysql_root_password}"
+      }
+
+      mounts = [
+        {
+          target = "/var/lib/mysql"
+          source = "${docker_volume.mysql_data_volume.name}"
+          type   = "volume"
+        }
+      ]
+    }
+    networks = ["${docker_network.private_bridge_network.name}"]
+  }
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Validate the files:
+```
+terraform validate
+```
+
+Build a plan:
+```
+terraform plan -out=tfplan -var 'ext_port=8082'
+```
+
+Apply the plan:
+```
+terraform apply tfplan
+```
+```
+docker service ls
+```
+
+```
+docker container ls
+```
+
+Destroy the environment:
+```
+terraform destroy -auto-approve -var 'ext_port=8082'
+```
+
+### Using Secrets
+In this lesson, we'll explore using Terraform to store sensitive data, by using Docker Secrets.
+  
+Setup the environment:
+```
+mkdir secrets
+cd secrets
+```
+
+Encode the password with Base64:
+```
+echo 'p4sSWoRd0!' | base64
+```
+
+Create `variables.tf`:
+```
+vi variables.tf
+```
+
+`variables.tf` contents:
+```
+variable "mysql_root_password" {
+  default     = "cDRzU1dvUmQwIQo="
+}
+
+variable "mysql_db_password" {
+  default     = "cDRzU1dvUmQwIQo="
+}
+```
+
+Create `image.tf`:
+```
+vi image.tf
+```
+
+`image.tf` contents:
+```
+resource "docker_image" "mysql_image" {
+  name = "mysql:5.7"
+}
+```
+
+Create `secrets.tf`:
+```
+vi secrets.tf
+```
+
+`secrets.tf` contents:
+```
+resource "docker_secret" "mysql_root_password" {
+  name = "root_password"
+  data = "${var.mysql_root_password}"
+}
+
+resource "docker_secret" "mysql_db_password" {
+  name = "db_password"
+  data = "${var.mysql_db_password}"
+}
+```
+
+Create `networks.tf`:
+```
+vi networks.tf
+```
+
+`networks.tf` contents:
+```
+resource "docker_network" "private_overlay_network" {
+  name     = "mysql_internal"
+  driver   = "overlay"
+  internal = true
+}
+```
+
+Create `volumes.tf`:
+```
+vi volumes.tf
+```
+
+`volumes.tf` contents:
+```
+resource "docker_volume" "mysql_data_volume" {
+  name = "mysql_data"
+}
+```
+
+Create `main.tf`:
+```
+vi main.tf
+```
+
+`main.tf` contents:
+```
+resource "docker_service" "mysql-service" {
+  name = "mysql_db"
+
+  task_spec {
+    container_spec {
+      image = "${docker_image.mysql_image.name}"
+
+      secrets = [
+        {
+          secret_id   = "${docker_secret.mysql_root_password.id}"
+          secret_name = "${docker_secret.mysql_root_password.name}"
+          file_name   = "/run/secrets/${docker_secret.mysql_root_password.name}"
+        },
+        {
+          secret_id   = "${docker_secret.mysql_db_password.id}"
+          secret_name = "${docker_secret.mysql_db_password.name}"
+          file_name   = "/run/secrets/${docker_secret.mysql_db_password.name}"
+        }
+      ]
+
+      env {
+        MYSQL_ROOT_PASSWORD_FILE = "/run/secrets/${docker_secret.mysql_root_password.name}"
+        MYSQL_DATABASE           = "mydb"
+        MYSQL_PASSWORD_FILE      = "/run/secrets/${docker_secret.mysql_db_password.name}"
+      }
+
+      mounts = [
+        {
+          target = "/var/lib/mysql"
+          source = "${docker_volume.mysql_data_volume.name}"
+          type   = "volume"
+        }
+      ]
+    }
+    networks = [
+      "${docker_network.private_overlay_network.name}"
+    ]
+  }
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Validate the files:
+```
+terraform validate
+```
+
+Build a plan:
+```
+terraform plan -out=tfplan
+```
+
+Apply the plan:
+```
+terraform apply tfplan
+```
+
+Find the MySQL container:
+```
+docker container ls
+```
+
+Use the exec command to log into the MySQL container:
+```
+docker container exec -it [CONTAINER_ID] /bin/bash
+```
+
+Access MySQL:
+```
+mysql -u root -p
+```
+
+Destroy the environment:
 ```
 terraform destroy -auto-approve
 ```
