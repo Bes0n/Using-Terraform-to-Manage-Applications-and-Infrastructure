@@ -23,7 +23,7 @@
     - [Managing Docker Volumes](#managing-docker-volumes)
     - [Creating Swarm Services](#creating-swarm-services)
     - [Using Secrets](#using-secrets)
-- [Using Terraform in a CI/CD Environment](#using-terraform-in-a-ci/cd-environment)
+- [Using Terraform in a CI/CD Environment](#using-terraform-in-a-cicd-environment)
     - [Building a Custom Jenkins Image](#building-a-custom-jenkins-image)
     - [Setting Up Jenkins](#setting-up-jenkins)
     - [Creating a Jenkins Job](#creating-a-jenkins-job)
@@ -2284,11 +2284,11 @@ In the Jenkins dashboard, click **New Item** Enter an item name of **PipelinePar
   
 Check the box for *This project is parameterized*. Click **Add Parameter** and select *Choice Parameter*. Give it a Name of **action**. For Choices, enter **Deploy** and **Destroy**, and make sure they are on separate lines. Enter **The action that will be executed** as the *Description*.
   
-Click **Add Parameter** and select **String Parameter**. For the name, enter **mysql_root_password**.. Enter **P4ssW0rd0!** in the `Default Value` box. Enter **MySQL root password**. as a *Description*.
+Click **Add Parameter** and select **String Parameter**. For the name, enter **mysql_root_password**.. Enter **P4ssW0rd0!** in the *Default Value* box. Enter **MySQL root password**. as a *Description*.
   
 For the next parameter, click **Add Parameter** once more and select **String Parameter**. For the name, enter **mysql_user_password**.. Enter **paSsw0rd0!** in the *Default Value* box. Enter **MySQL user password**. as a *Description*.
 
-Down in the *Pipeline* section, give a *Definition* of **Pipeline script**, and add the following to the `Script`:
+Down in the *Pipeline* section, give a *Definition* of **Pipeline script**, and add the following to the *Script*:
 ```
 node {
   git 'https://github.com/linuxacademy/content-terraform-docker-secrets.git'
