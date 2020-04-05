@@ -28,8 +28,8 @@
     - [Setting Up Jenkins](#setting-up-jenkins)
     - [Creating a Jenkins Job](#creating-a-jenkins-job)
     - [Building a Jenkins Pipeline Part 1](#building-a-jenkins-pipeline-part-1)
-    - [Building a Jenkins Pipeline Part 1](#building-a-jenkins-pipeline-part-2)
-    - [Building a Jenkins Pipeline Part 1](#building-a-jenkins-pipeline-part-3)
+    - [Building a Jenkins Pipeline Part 2](#building-a-jenkins-pipeline-part-2)
+    - [Building a Jenkins Pipeline Part 3](#building-a-jenkins-pipeline-part-3)
 
 ## About Terraform
 - Terraform is a tool for building infrastructure
