@@ -33,6 +33,10 @@
 - [Terraform and AWS](#terraform-and-aws)
     - [Setting Up a Cloud Sandbox](#setting-up-a-cloud-sandbox)
     - [Our Architecture: What We're Going to Build](#our-architecture-what-were-going-to-build)
+    - [Storage Part 1: The S3 Bucket and Random ID](#storage-part-1-the-s3-bucket-and-random-id)
+    - [Storage Part 2: The Root Module](#storage-part-2-the-root-module)
+    - [Networking Part 1: VPC, SG, Subnets](#networking-part-1-vpc-sg-subnets)
+    - [Networking Part 2: The Root Module](#networking-part-2-the-root-module)
 
 ## About Terraform
 - Terraform is a tool for building infrastructure
@@ -2352,10 +2356,471 @@ We will have several modules for each component of our architecture
   - Compute Module
 
 ![img](https://github.com/Bes0n/Using-Terraform-to-Manage-Applications-and-Infrastructure/blob/master/images/img2.png)
-
-![img](https://github.com/Bes0n/Using-Terraform-to-Manage-Applications-and-Infrastructure/blob/master/images/img3.png)
-
+  
 High-level diagram will be following:
 - Storage module is going to use S3 Bucket 
 - Network module will deploy internet gateway with public and private route tables
 - Two EC2 instances will be deployed and ssh keys generated for them. 
+  
+![img](https://github.com/Bes0n/Using-Terraform-to-Manage-Applications-and-Infrastructure/blob/master/images/img3.png)
+
+### Storage Part 1: The S3 Bucket and Random ID
+In this lesson, we will start working with AWS by creating a S3 Terraform module.
+  
+Environment setup:
+```
+mkdir -p ~/terraform/AWS/storage
+cd ~/terraform/AWS/storage
+```
+
+Create main.tf:
+```
+vi main.tf
+```
+
+main.tf:
+```
+#---------storage/main.tf---------
+
+# Create a random id
+resource "random_id" "tf_bucket_id" {
+  byte_length = 2
+}
+
+# Create the bucket
+resource "aws_s3_bucket" "tf_code" {
+    bucket        = "${var.project_name}-${random_id.tf_bucket_id.dec}"
+    acl           = "private"
+
+    force_destroy =  true
+
+    tags {
+      Name = "tf_bucket"
+    }
+}
+```
+
+Create variables.tf:
+```
+vi variables.tf
+```
+
+variables.tf:
+```
+#----storage/variables.tf----
+variable "project_name" {}
+```
+
+outputs.tf:
+```
+vi outputs.tf
+```
+
+outputs.tf:
+```
+#----storage/outputs.tf----
+output "bucketname" {
+  value = "${aws_s3_bucket.tf_code.id}"
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Validate your files:
+```
+terraform validate
+```
+
+Plan the deployment:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+export AWS_DEFAULT_REGION="us-east-1"
+terraform plan -out=tfplan -var project_name=la-terraform
+```
+
+Deploy the S3 bucket:
+```
+terraform apply tfplan
+```
+
+Destroy S3 bucket:
+```
+terraform destroy -auto-approve -var project_name=la-terraform
+```
+
+### Storage Part 2: The Root Module
+In this lesson, we will start working on our root module. We'll start off by adding the storage module created in the previous lesson.
+  
+Environment setup:
+```
+cd ~/terraform/AWS
+touch {main.tf,variables.tf,outputs.tf,terraform.tfvars}
+```
+
+Edit main.tf:
+```
+vi main.tf
+```
+
+main.tf:
+```
+#----root/main.tf-----
+provider "aws" {
+  region = "${var.aws_region}"
+}
+
+# Deploy Storage Resources
+module "storage" {
+  source       = "./storage"
+  project_name = "${var.project_name}"
+}
+```
+
+Edit variables.tf:
+```
+vi variables.tf
+```
+
+variables.tf:
+```
+#----root/variables.tf-----
+variable "aws_region" {}
+
+#------ storage variables
+variable "project_name" {}
+```
+
+Edit terraform.tfvars:
+```
+vi terraform.tfvars
+```
+
+terraform.tfvars:
+```
+aws_region   = "us-east-1"
+project_name = "la-terraform"
+```
+
+Edit outputs.tf:
+```
+vi outputs.tf
+```
+
+outputs.tf:
+```
+#----root/outputs.tf-----
+
+#----storage outputs------
+output "Bucket Name" {
+  value = "${module.storage.bucketname}"
+}
+```
+
+Initialize terraform:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+terraform init
+```
+
+Validate code:
+```
+terraform validate
+```
+
+Deploy the S3 bucket:
+```
+terraform apply -auto-approve
+```
+
+Destroy S3 bucket:
+```
+terraform destroy -auto-approve
+```
+
+### Networking Part
+In this lesson, we will start our networking resource deployment and we will deploy our Internet Gateway and route tables.
+  
+Environment setup:
+```
+mkdir -p  ~/terraform/AWS/networking
+cd ~/terraform/AWS/networking
+```
+
+Touch the files:
+```
+touch {main.tf,variables.tf,outputs.tf,terraform.tfvars}
+```
+
+Edit main.tf:
+```
+vi main.tf
+```
+
+main.tf:
+```
+#----networking/main.tf----
+
+data "aws_availability_zones" "available" {}
+
+resource "aws_vpc" "tf_vpc" {
+  cidr_block           = "${var.vpc_cidr}"
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags {
+    Name = "tf_vpc"
+  }
+}
+
+resource "aws_internet_gateway" "tf_internet_gateway" {
+  vpc_id = "${aws_vpc.tf_vpc.id}"
+
+  tags {
+    Name = "tf_igw"
+  }
+}
+
+resource "aws_route_table" "tf_public_rt" {
+  vpc_id = "${aws_vpc.tf_vpc.id}"
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = "${aws_internet_gateway.tf_internet_gateway.id}"
+  }
+
+  tags {
+    Name = "tf_public"
+  }
+}
+
+resource "aws_default_route_table" "tf_private_rt" {
+  default_route_table_id  = "${aws_vpc.tf_vpc.default_route_table_id}"
+
+  tags {
+    Name = "tf_private"
+  }
+}
+
+resource "aws_subnet" "tf_public_subnet" {
+  count                   = 2
+  vpc_id                  = "${aws_vpc.tf_vpc.id}"
+  cidr_block              = "${var.public_cidrs[count.index]}"
+  map_public_ip_on_launch = true
+  availability_zone       = "${data.aws_availability_zones.available.names[count.index]}"
+
+  tags {
+    Name = "tf_public_${count.index + 1}"
+  }
+}
+
+resource "aws_route_table_association" "tf_public_assoc" {
+  count          = "${aws_subnet.tf_public_subnet.count}"
+  subnet_id      = "${aws_subnet.tf_public_subnet.*.id[count.index]}"
+  route_table_id = "${aws_route_table.tf_public_rt.id}"
+}
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for access to the public instances"
+  vpc_id      = "${aws_vpc.tf_vpc.id}"
+
+  #SSH
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["${var.accessip}"]
+  }
+
+  #HTTP
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["${var.accessip}"]
+  }
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+```
+
+Edit variables.tf:
+```
+vi variables.tf
+```
+
+variables.tf:
+```
+#----networking/variables.tf----
+variable "vpc_cidr" {}
+
+variable "public_cidrs" {
+  type = "list"
+}
+
+variable "accessip" {}
+```
+
+Edit outputs.tf:
+```
+vi outputs.tf
+```
+
+outputs.tf:
+```
+#-----networking/outputs.tf----
+
+output "public_subnets" {
+  value = "${aws_subnet.tf_public_subnet.*.id}"
+}
+
+output "public_sg" {
+  value = "${aws_security_group.tf_public_sg.id}"
+}
+
+output "subnet_ips" {
+  value = "${aws_subnet.tf_public_subnet.*.cidr_block}"
+}
+```
+
+terraform.tfvars:
+```
+vpc_cidr     = "10.123.0.0/16"
+public_cidrs = [
+  "10.123.1.0/24",
+  "10.123.2.0/24"
+]
+accessip    = "0.0.0.0/0"
+```
+
+Initialize Terraform:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+terraform init
+```
+
+Validate code:
+```
+terraform validate
+```
+
+Deploy Network:
+```
+terraform apply -auto-approve
+```
+
+Destroy Network:
+```
+terraform destroy -auto-approve
+```
+
+Delete terraform.tfvars:
+```
+rm terraform.tfvars
+```
+
+### Networking Part 2: The Root Module
+In this lesson, we will add the networking module to the root module.
+  
+Environment setup:
+```
+cd ~/terraform/AWS
+```
+
+Edit main.tf:
+```
+vi main.tf
+```
+
+main.tf:
+```
+provider "aws" {
+  region = "${var.aws_region}"
+}
+
+# Deploy Storage Resources
+module "storage" {
+  source       = "./storage"
+  project_name = "${var.project_name}"
+}
+
+# Deploy Networking Resources
+module "networking" {
+  source       = "./networking"
+  vpc_cidr     = "${var.vpc_cidr}"
+  public_cidrs = "${var.public_cidrs}"
+  accessip     = "${var.accessip}"
+}
+```
+
+Edit variables.tf:
+```
+vi variables.tf
+```
+
+variables.tf:
+```
+#----root/variables.tf-----
+variable "aws_region" {}
+
+#------ storage variables
+variable "project_name" {}
+
+#-------networking variables
+variable "vpc_cidr" {}
+variable "public_cidrs" {
+  type = "list"
+}
+variable "accessip" {}
+```
+
+Edit terraform.tfvars:
+```
+vi terraform.tfvars
+```
+
+terraform.tfvars:
+```
+aws_region   = "us-east-1"
+project_name = "la-terraform"
+vpc_cidr     = "10.123.0.0/16"
+public_cidrs = [
+  "10.123.1.0/24",
+  "10.123.2.0/24"
+]
+accessip    = "0.0.0.0/0"
+```
+
+Reinitialize Terraform:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+terraform init
+```
+
+Validate code:
+```
+terraform validate
+```
+
+Apply Changes:
+```
+terraform apply -auto-approve
+```
+
+Destroy environment:
+```
+terraform destroy -auto-approve
+```
