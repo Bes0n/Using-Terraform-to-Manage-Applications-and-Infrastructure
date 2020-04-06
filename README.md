@@ -30,6 +30,9 @@
     - [Building a Jenkins Pipeline Part 1](#building-a-jenkins-pipeline-part-1)
     - [Building a Jenkins Pipeline Part 2](#building-a-jenkins-pipeline-part-2)
     - [Building a Jenkins Pipeline Part 3](#building-a-jenkins-pipeline-part-3)
+- [Terraform and AWS](#terraform-and-aws)
+    - [Setting Up a Cloud Sandbox](#setting-up-a-cloud-sandbox)
+    - [Our Architecture: What We're Going to Build](#our-architecture-what-were-going-to-build)
 
 ## About Terraform
 - Terraform is a tool for building infrastructure
@@ -2331,3 +2334,28 @@ node {
   }
 }
 ```
+
+## Terraform and AWS
+### Setting Up a Cloud Sandbox
+- We're going to create AWS sandbox from Linux academy and access it. 
+- Be adviced that sandbox will be destroyed after some time 
+- To allow accessing our AWS resources first of all we need to export our keys
+  - export AWS_ACCESS_KEY_ID="AKIAW6UUHXHLLNJYDW5R"
+  - export AWS_SECRET_ACCESS_KEY="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"
+
+
+### Our Architecture: What We're Going to Build
+We will have several modules for each component of our architecture
+- Root:
+  - Storage Module
+  - Network Module
+  - Compute Module
+
+![img](https://github.com/Bes0n/Using-Terraform-to-Manage-Applications-and-Infrastructure/blob/master/images/img2.png)
+
+![img](https://github.com/Bes0n/Using-Terraform-to-Manage-Applications-and-Infrastructure/blob/master/images/img3.png)
+
+High-level diagram will be following:
+- Storage module is going to use S3 Bucket 
+- Network module will deploy internet gateway with public and private route tables
+- Two EC2 instances will be deployed and ssh keys generated for them. 
