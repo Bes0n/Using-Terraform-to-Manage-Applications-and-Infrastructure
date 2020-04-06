@@ -2542,7 +2542,7 @@ Destroy S3 bucket:
 terraform destroy -auto-approve
 ```
 
-### Networking Part
+### Networking Part 1: VPC, SG, Subnets
 In this lesson, we will start our networking resource deployment and we will deploy our Internet Gateway and route tables.
   
 Environment setup:
