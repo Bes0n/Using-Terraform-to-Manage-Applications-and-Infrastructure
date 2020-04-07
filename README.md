@@ -37,6 +37,9 @@
     - [Storage Part 2: The Root Module](#storage-part-2-the-root-module)
     - [Networking Part 1: VPC, SG, Subnets](#networking-part-1-vpc-sg-subnets)
     - [Networking Part 2: The Root Module](#networking-part-2-the-root-module)
+    - [Compute Part 1: AMI Data, Key Pair, and the File Function](#compute-part-1-ami-data-key-pair-and-the-file-function)
+    - [Compute Part 2: The EC2 Instance](#compute-part-2-the-ec2-instance)
+    - [Compute Part 3: The Root Module](#compute-part-3-the-root-module)
 
 ## About Terraform
 - Terraform is a tool for building infrastructure
@@ -2823,4 +2826,358 @@ terraform apply -auto-approve
 Destroy environment:
 ```
 terraform destroy -auto-approve
+```
+
+### Compute Part 1: AMI Data, Key Pair, and the File Function
+In this lesson, we will start working on building out the resources for out AWS compute.
+  
+Environment setup:
+```
+mkdir -p  ~/terraform/AWS/compute
+cd ~/terraform/AWS/compute
+```
+
+Touch the files:
+```
+touch {main.tf,variables.tf,outputs.tf}
+```
+
+Create a SSH key.
+```
+ssh-keygen
+```
+
+Edit main.tf:
+```
+vi main.tf
+```
+
+main.tf:
+```
+#----compute/main.tf#----
+data "aws_ami" "server_ami" {
+  most_recent = true
+
+  owners = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn-ami-hvm*-x86_64-gp2"]
+  }
+}
+
+resource "aws_key_pair" "tf_auth" {
+  key_name   = "${var.key_name}"
+  public_key = "${file(var.public_key_path)}"
+}
+```
+
+Edit variables.tf:
+```
+vi variables.tf
+```
+
+variables.tf:
+```
+#----compute/variables.tf----
+variable "key_name" {}
+
+variable "public_key_path" {}
+```
+
+Initialize Terraform:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+terraform init
+```
+
+Validate changes:
+```
+terraform validate
+```
+
+Plan the changes:
+```
+terraform plan -out=tfplan -var 'key_name=tfkey' -var 'public_key_path=/home/cloud_user/.ssh/id_rsa.pub'
+```
+
+Apply the changes:
+```
+terraform apply -auto-approve
+```
+  
+Provide the values for key_name and public_key_path: key_name: tfkey public_key_path: /home/cloud_user/.ssh/id_rsa.pub
+  
+Destroy environment:
+```
+terraform destroy -auto-approve
+```
+  
+Provide the values for key_name and public_key_path: key_name: tfkey public_key_path: /home/cloud_user/.ssh/id_rsa.pub
+
+### Compute Part 2: The EC2 Instance
+In this lesson, we will finish off the Compute module by adding the aws_instance resource.
+  
+Edit main.tf:
+```
+vi main.tf
+```
+
+main.tf:
+```
+#-----compute/main.tf#-----
+
+data "aws_ami" "server_ami" {
+  most_recent = true
+
+  owners = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["amzn-ami-hvm*-x86_64-gp2"]
+  }
+}
+
+resource "aws_key_pair" "tf_auth" {
+  key_name   = "${var.key_name}"
+  public_key = "${file(var.public_key_path)}"
+}
+
+data "template_file" "user-init" {
+  count    = 2
+  template = "${file("${path.module}/userdata.tpl")}"
+
+  vars {
+    firewall_subnets = "${element(var.subnet_ips, count.index)}"
+  }
+}
+
+resource "aws_instance" "tf_server" {
+  count         = "${var.instance_count}"
+  instance_type = "${var.instance_type}"
+  ami           = "${data.aws_ami.server_ami.id}"
+
+  tags {
+    Name = "tf_server-${count.index +1}"
+  }
+
+  key_name               = "${aws_key_pair.tf_auth.id}"
+  vpc_security_group_ids = ["${var.security_group}"]
+  subnet_id              = "${element(var.subnets, count.index)}"
+  user_data              = "${data.template_file.user-init.*.rendered[count.index]}"
+}
+```
+
+Create userdata.tpl:
+```
+vi userdata.tpl
+```
+
+userdata.tpl:
+```
+#!/bin/bash
+yum install httpd -y
+echo "Subnet for Firewall: ${firewall_subnets}" >> /var/www/html/index.html
+service httpd start
+chkconfig httpd on
+```
+
+Edit variables.tf:
+```
+vi variables.tf
+```
+
+variables.tf:
+```
+#-----compute/variables.tf
+
+variable "key_name" {}
+
+variable "public_key_path" {}
+
+variable "subnet_ips" {
+  type = "list"
+}
+
+variable "instance_count" {}
+
+variable "instance_type" {}
+
+variable "security_group" {}
+
+variable "subnets" {
+  type = "list"
+}
+```
+
+Edit outputs.tf:
+```
+vi outputs.tf
+```
+
+outputs.tf"
+```
+#-----compute/outputs.tf-----
+
+output "server_id" {
+  value = "${join(", ", aws_instance.tf_server.*.id)}"
+}
+
+output "server_ip" {
+  value = "${join(", ", aws_instance.tf_server.*.public_ip)}"
+}
+```
+
+### Compute Part 3: The Root Module
+In this lesson, we will finish working with the EC2 resources by adding the compute module to the root module.
+  
+Edit main.tf:
+```
+vi main.tf
+```
+
+main.tf:
+```
+provider "aws" {
+  region = "${var.aws_region}"
+}
+
+# Deploy Storage Resources
+module "storage" {
+  source       = "./storage"
+  project_name = "${var.project_name}"
+}
+
+# Deploy Networking Resources
+module "networking" {
+  source       = "./networking"
+  vpc_cidr     = "${var.vpc_cidr}"
+  public_cidrs = "${var.public_cidrs}"
+  accessip    = "${var.accessip}"
+}
+
+# Deploy Compute Resources
+module "compute" {
+  source          = "./compute"
+  instance_count  = "${var.instance_count}"
+  key_name        = "${var.key_name}"
+  public_key_path = "${var.public_key_path}"
+  instance_type   = "${var.server_instance_type}"
+  subnets         = "${module.networking.public_subnets}"
+  security_group  = "${module.networking.public_sg}"
+  subnet_ips      = "${module.networking.subnet_ips}"
+}
+```
+
+Edit variables.tf:
+```
+vi variables.tf
+```
+
+variables.tf:
+```
+#----root/variables.tf-----
+variable "aws_region" {}
+
+#------ storage variables
+variable "project_name" {}
+
+#-------networking variables
+variable "vpc_cidr" {}
+variable "public_cidrs" {
+  type = "list"
+}
+variable "accessip" {}
+
+#-------compute variables
+variable "key_name" {}
+variable "public_key_path" {}
+variable "server_instance_type" {}
+variable "instance_count" {
+  default = 1
+}
+```
+
+Edit outputs.tf:
+```
+vi outputs.tf
+```
+
+outputs.tf:
+```
+#----root/outputs.tf-----
+
+#----storage outputs------
+
+output "Bucket Name" {
+  value = "${module.storage.bucketname}"
+}
+
+#---Networking Outputs -----
+
+output "Public Subnets" {
+  value = "${join(", ", module.networking.public_subnets)}"
+}
+
+output "Subnet IPs" {
+  value = "${join(", ", module.networking.subnet_ips)}"
+}
+
+output "Public Security Group" {
+  value = "${module.networking.public_sg}"
+}
+
+#---Compute Outputs ------
+
+output "Public Instance IDs" {
+  value = "${module.compute.server_id}"
+}
+
+output "Public Instance IPs" {
+  value = "${module.compute.server_ip}"
+}
+```
+
+terraform.tfvars:
+```
+aws_region   = "us-west-1"
+project_name = "la-terraform"
+vpc_cidr     = "10.123.0.0/16"
+public_cidrs = [
+  "10.123.1.0/24",
+  "10.123.2.0/24"
+]
+accessip    = "0.0.0.0/0"
+key_name = "tf_key"
+public_key_path = "/home/cloud_user/.ssh/id_rsa.pub"
+server_instance_type = "t2.micro"
+instance_count = 2
+```
+
+Initialize Terraform:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+terraform init
+```
+
+Validate changes:
+```
+terraform validate
+```
+
+Plan the changes:
+```
+terraform plan
+```
+
+Apply the changes:
+```
+terraform apply
+```
+
+Destroy environment:
+```
+terraform destroy
 ```
