@@ -45,6 +45,12 @@
 - [Terraform State](#terraform-state)
     - [Terraform Formatting and Remote State](#terraform-formatting-and-remote-state)
     - [Using Remote State with Jenkins](#using-remote-state-with-jenkins)
+- [Terraform and Kubernetes](#terraform-and-kubernetes)
+    - [Setting up Kubernetes Installing Terraform](#setting-up-kubernetes-installing-terraform)
+    - [Creating a Pod](#creating-a-pod)
+    - [Creating a Pod and Service](#creating-a-pod-and-service)
+    - [Creating a Deployment](#creating-a-deployment)
+
 
 ## About Terraform
 - Terraform is a tool for building infrastructure
@@ -3355,4 +3361,300 @@ docker exec -it 73575a9ee4ac /bin/bash
 Remove `.terraform` file from your project **DeployDockerService** located in `/var/jenkins_home/workspace/`
 ```
 rm -r .terraform
+```
+
+## Terraform and Kubernetes
+### Setting up Kubernetes Installing Terraform
+In this lesson we will setup a Kuberentes master and install Terraform.
+  
+Add the following to `kube-config.yml`:
+```
+apiVersion: kubeadm.k8s.io/v1beta1
+kind: ClusterConfiguration
+networking:
+  podSubnet: 10.244.0.0/16
+apiServer:
+  extraArgs:
+    service-node-port-range: 8000-31274
+```
+  
+Initialize Kubernetes:
+```
+sudo kubeadm init --config kube-config.yml
+```
+  
+Copy admin.conf to your home directory:
+```
+mkdir -p $HOME/.kube
+sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
+sudo chown $(id -u):$(id -g) $HOME/.kube/config
+```
+  
+Install Flannel:
+```
+sudo kubectl apply -f https://raw.githubusercontent.com/coreos/flannel/master/Documentation/kube-flannel.yml
+```
+  
+Untaint the Kubernetes Master:
+```
+kubectl taint nodes --all node-role.kubernetes.io/master-
+```
+
+#### Install Terraform
+Terraform will be installed on the Swarm manager.
+  
+Install Terraform 0.11.13:
+```
+sudo curl -O https://releases.hashicorp.com/terraform/0.11.13/terraform_0.11.13_linux_amd64.zip
+sudo unzip terraform_0.11.13_linux_amd64.zip -d /usr/local/bin/
+```
+  
+Test the Terraform installation:
+```
+terraform version
+```
+
+### Creating a Pod
+In this video, we will start working with Kubernetes resources by creating a Pod.
+  
+Setup your environment:
+```
+mkdir -p ~/terraform/pod
+cd ~/terraform/pod
+```
+
+vi `main.tf`:
+```
+resource "kubernetes_pod" "ghost_alpine" {
+  metadata {
+    name = "ghost-alpine"
+  }
+
+  spec {
+    host_network = "true"
+    container {
+      image = "ghost:alpine"
+      name  = "ghost-alpine"
+    }
+  }
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Validate main.tf:
+```
+terraform validate
+```
+
+Plan the deployment:
+```
+terraform plan
+```
+
+Deploy the pod:
+```
+terraform apply -auto-approve
+```
+
+List the Pods:
+```
+kubectl get pods
+```
+
+Reset the environment:
+```
+terraform destroy -auto-approve
+```
+
+### Creating a Pod and Service
+In this lesson, we will create a pod and service using Terraform.
+  
+Setup your environment:
+```
+mkdir -p ~/terraform/service
+cd ~/terraform/service
+```
+
+Create main.tf:
+```
+vi main.tf
+```
+
+main.tf contents:
+```
+resource "kubernetes_service" "ghost_service" {
+  metadata {
+    name = "ghost-service"
+  }
+  spec {
+    selector {
+      app = "${kubernetes_pod.ghost_alpine.metadata.0.labels.app}"
+    }
+    port {
+      port = "2368"
+      target_port = "2368"
+      node_port = "8081"
+    }
+    type = "NodePort"
+  }
+}
+
+resource "kubernetes_pod" "ghost_alpine" {
+  metadata {
+    name = "ghost-alpine"
+    labels {
+      app = "ghost-blog"
+    }
+  }
+
+  spec {
+    container {
+      image = "ghost:alpine"
+      name  = "ghost-alpine"
+      port  {
+        container_port = "2368"
+      }
+    }
+  }
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Validate the files:
+```
+terraform validate
+```
+
+Plan the deployment:
+```
+terraform plan
+```
+
+Deploy the pod:
+```
+terraform apply -auto-approve
+```
+
+List the Pods:
+```
+kubectl get pods
+```
+
+List the Services:
+```
+kubectl get services
+```
+
+Reset the environment:
+```
+terraform destroy -auto-approve
+```
+
+### Creating a Deployment
+In this lesson, we will use Terraform to create a Kubernetes deployment and service.
+  
+Setup your environment:
+```
+mkdir -p ~/terraform/deployment
+cd ~/terraform/deployment
+```
+
+Create main.tf:
+```
+vi main.tf
+```
+
+main.tf contents:
+```
+resource "kubernetes_service" "ghost_service" {
+  metadata {
+    name = "ghost-service"
+  }
+  spec {
+    selector {
+      app = "${kubernetes_deployment.ghost_deployment.spec.0.template.0.metadata.0.labels.app}"
+    }
+    port {
+      port        = "2368"
+      target_port = "2368"
+      node_port   = "8080"
+    }
+
+    type = "NodePort"
+  }
+}
+
+resource "kubernetes_deployment" "ghost_deployment" {
+  metadata {
+    name = "ghost-blog"
+  }
+
+  spec {
+    replicas = "1"
+
+    selector {
+      match_labels {
+        app = "ghost-blog"
+      }
+    }
+
+    template {
+      metadata {
+        labels {
+          app = "ghost-blog"
+        }
+      }
+
+      spec {
+        container {
+          name  = "ghost"
+          image = "ghost:alpine"
+          port {
+            container_port = "2368"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Initialize Terraform:
+```
+terraform init
+```
+
+Validate the files:
+```
+terraform validate
+```
+
+Plan the deployment:
+```
+terraform plan
+```
+
+Deploy the pod:
+```
+terraform apply -auto-approve
+```
+
+List the Deployments:
+```
+kubectl get deployments
+kubectl get pods
+kubectl delete pod [POD_ID]
+```
+
+Reset the environment:
+```
+terraform destroy -auto-approve
 ```
