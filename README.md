@@ -50,7 +50,14 @@
     - [Creating a Pod](#creating-a-pod)
     - [Creating a Pod and Service](#creating-a-pod-and-service)
     - [Creating a Deployment](#creating-a-deployment)
-
+- [Terraform 0.12](#terraform-012)
+    - [Setup and Disclaimer](#setup-and-disclaimer)
+    - [Working with Resources](#working-with-resources)
+    - [Input Variables](#input-variables)
+    - [Output Variables](#output-variables)
+    - [Dynamic Nested Blocks Part 1](#dynamic-nested-blocks-part-1)
+    - [Dynamic Nested Blocks Part 2](#dynamic-nested-blocks-part-2)
+    - [Expressions and Functions](#expressions-and-functions)
 
 ## About Terraform
 - Terraform is a tool for building infrastructure
@@ -3657,4 +3664,485 @@ kubectl delete pod [POD_ID]
 Reset the environment:
 ```
 terraform destroy -auto-approve
+```
+
+## Terraform 0.12
+### Setup and Disclaimer
+In this lesson, we will install Terraform 0.12.2 and talk about some of the pitfalls you may encounter working with such a new release.
+  
+Install Terraform 0.12:
+```
+cd /tmp
+sudo curl -O https://releases.hashicorp.com/terraform/0.12.2/terraform_0.12.2_linux_amd64.zip
+sudo unzip terraform_0.12.2_linux_amd64.zip
+sudo cp terraform /usr/bin/terraform12
+```
+
+Test the Terraform installation:
+```
+terraform12 version
+```
+
+Setup a Terraform 0.12 directory:
+```
+mkdir /home/cloud_user/terraform/t12
+cd /home/cloud_user/terraform/t12
+cp -r /home/cloud_user/terraform/basics .
+cd basics
+rm -r .terraform
+```
+
+Test Docker by initializing Terraform:
+```
+terraform12 init
+```
+
+Copy AWS/storage to the Terraform 0.12 directory:
+```
+cd /home/cloud_user/terraform/t12
+cp -r ../AWS/storage .
+cd storage
+```
+
+Edit main.tf:
+```
+vi main.tf
+```
+
+main.tf contents:
+```
+#---------storage/main.tf---------
+
+# Create a random id
+resource "random_id" "tf_bucket_id" {
+  byte_length = 2
+}
+
+# Create the bucket
+resource "aws_s3_bucket" "tf_code" {
+    bucket        = "${var.project_name}-${random_id.tf_bucket_id.dec}"
+    acl           = "private"
+
+    force_destroy =  true
+
+    tags = {
+      Name = "tf_bucket"
+    }
+}
+```
+
+Set up the AWS access key:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+export AWS_DEFAULT_REGION="us-east-1"
+```
+
+Initialize Terraform:
+```
+terraform12 init
+```
+
+Deploy the S3 bucket:
+```
+terraform12 apply -var project_name=la-terraform -auto-approve
+```
+
+Destroy the S3 bucket:
+```
+terraform12 destroy -var project_name=la-terraform -auto-approve
+```
+
+Test with the older version of Terraform:
+```
+ls -la
+rm -r .terraform terraform.tfstate*
+terraform init
+terraform apply -var project_name=la-terraform -auto-approve
+terraform destroy -var project_name=la-terraform -auto-approve
+```
+
+### Working with Resources
+In this lesson, we will start refactoring the storage module to use some of the new features of Terraform 0.12.x.
+```
+cd /home/cloud_user/terraform/t12/storage
+rm -rf *
+```
+
+Create main.tf:
+```
+vi main.tf
+```
+
+main.tf contents:
+```
+# Create a random id
+resource "random_id" "tf_bucket_id" {
+  byte_length = 2
+}
+
+# Create the bucket
+resource "aws_s3_bucket" "tf_code" {
+    bucket        = format("la-terraform-%d", random_id.tf_bucket_id.dec)
+    acl           = "private"
+
+    force_destroy =  true
+
+    tags = {
+      Name = "tf_bucket"
+    }
+}
+```
+
+Set up the AWS access key:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+export AWS_DEFAULT_REGION="us-east-1"
+```
+
+Initialize Terraform:
+```
+terraform12 init
+```
+
+Deploy the S3 bucket:
+```
+terraform12 apply -auto-approve
+```
+
+Destroy the S3 bucket:
+```
+terraform12 destroy -auto-approve
+```
+
+### Input Variables
+In this lesson, we will continue refactoring the storage module by adding in variables.
+  
+Create variables.tf:
+```
+vi variables.tf
+```
+
+variables.tf contents:
+```
+variable "project_name" {
+  type = string
+}
+```
+
+Create main.tf:
+```
+vi main.tf
+```
+
+main.tf contents:
+```
+# Create a random id
+resource "random_id" "tf_bucket_id" {
+  byte_length = 2
+}
+
+# Create the bucket
+resource "aws_s3_bucket" "tf_code" {
+    bucket        = format("%s-%d", var.project_name, random_id.tf_bucket_id.dec)
+    acl           = "private"
+    force_destroy =  true
+    tags          = {
+      Name = "tf_bucket"
+    }
+}
+```
+
+Set up the AWS access key:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]]"
+export AWS_DEFAULT_REGION="us-east-1"
+```
+
+Plan the deploy of the S3 bucket:
+```
+terraform12 plan -var project_name=la-terraform
+```
+
+Deploy the S3 bucket:
+```
+terraform12 apply -var project_name=la-terraform -auto-approve
+```
+
+Destroy the S3 bucket:
+```
+terraform12 destroy -var project_name=la-terraform -auto-approve
+```
+
+### Output Values
+In this lesson, we will finish off refactoring the storage module by adding outputs of the S3 bucket name as well as the project_name variable.
+  
+Create outputs.tf:
+```
+vi outputs.tf
+```
+
+outputs.tf contents:
+```
+output "bucketname" {
+  value = aws_s3_bucket.tf_code.id
+}
+
+output "project_name" {
+  value = var.project_name
+}
+```
+
+Initialize Terraform:
+```
+terraform12 init
+```
+
+Deploy the S3 bucket:
+```
+terraform12 apply -var project_name=la-terraform -auto-approve
+```
+
+Destroy the S3 bucket:
+```
+terraform destroy -var project_name=la-terraform -auto-approve
+```
+
+### Dynamic Nested Blocks Part 1
+In this lesson we will begin working with dynamic nested blocks to dynamically construct nested blocks.
+  
+Set up the environment:
+```
+mkdir ~/terraform/t12/loops
+cd ~/terraform/t12/loops
+```
+
+Create main.tf:
+```
+vi main.tf
+```
+  
+Please note that `default = ["22", "22"]` has been updated to `default = ["22", "80"]`. The video has not been updated yet to reflect this change.
+  
+`main.tf` contents:
+```
+variable "vpc_cidr" {
+  default = "10.123.0.0/16"
+}
+
+variable "accessip" {
+  default = "0.0.0.0/0"
+}
+
+variable "service_ports" {
+  default = ["22", "80"]
+}
+
+resource "aws_vpc" "tf_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "tf_vpc"
+  }
+}
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for access to the public instances"
+  vpc_id      = aws_vpc.tf_vpc.id
+
+  dynamic "ingress" {
+    for_each = var.service_ports
+    content {
+      from_port   = ingress.value
+      to_port     = ingress.value
+      protocol    = "tcp"
+      cidr_blocks = [var.accessip]
+    }
+  }
+}
+```
+
+Initialize Terraform:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+export AWS_DEFAULT_REGION="us-east-1"
+terraform12 init
+```
+
+Plan the changes:
+```
+terraform12 plan
+```
+
+
+### Dynamic Nested Blocks Part 2
+In this lesson, we will continue working with dynamic nested blocks. We will expand on it by using the for expression to loop through a list of maps.
+  
+Set up the environment:
+```
+mkdir ~/terraform/t12/dynamic
+cd ~/terraform/t12/dynamic
+```
+
+Create main.tf:
+```
+vi main.tf
+```
+
+main.tf contents:
+```
+variable "vpc_cidr" {
+  default = "10.123.0.0/16"
+}
+
+variable "accessip" {
+  default = "0.0.0.0/0"
+}
+
+variable "service_ports" {
+  default = [
+    {
+      from_port = "22",
+      to_port   = "22"
+    },
+    {
+      from_port = "80",
+      to_port   = "80"
+    }
+  ]
+}
+
+resource "aws_vpc" "tf_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "tf_vpc"
+  }
+}
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for access to the public instances"
+  vpc_id      = aws_vpc.tf_vpc.id
+
+  dynamic "ingress" {
+    for_each = [ for s in var.service_ports: {
+      from_port = s.from_port
+      to_port = s.to_port
+    }]
+
+    content {
+      from_port   = ingress.value.from_port
+      to_port     = ingress.value.to_port
+      protocol    = "tcp"
+      cidr_blocks = [var.accessip]
+    }
+  }
+}
+
+output "ingress_port_mapping" {
+  value = {
+    for ingress in aws_security_group.tf_public_sg.ingress:
+    format("From %d", ingress.from_port) => format("To %d", ingress.to_port)
+  }
+}
+```
+
+Initialize Terraform:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+export AWS_DEFAULT_REGION="us-east-1"
+terraform12 init
+```
+
+Plan the changes:
+```
+terraform12 plan
+```
+
+Apply the changes:
+```
+terraform12 apply -auto-approve
+```
+
+Destroy the changes:
+```
+terraform12 destroy -auto-approve
+```
+
+### Expressions and Functions
+In this lesson, we will look at the documentation for functions. Then, we will use the `cidrsubnet` function to calculate a subnet address within a given IP network address prefix.
+  
+Set up the environment:
+```
+mkdir ~/terraform/t12/functions
+cd ~/terraform/t12/functions
+```
+
+Create main.tf:
+```
+vi main.tf
+```
+
+main.tf contents:
+```
+variable "vpc_cidr" {
+  default = "10.123.0.0/16"
+}
+
+variable "accessip" {
+  default = "0.0.0.0/0"
+}
+
+variable "subnet_numbers" {
+  default = [1, 2, 3]
+}
+
+resource "aws_vpc" "tf_vpc" {
+  cidr_block           = var.vpc_cidr
+  enable_dns_hostnames = true
+  enable_dns_support   = true
+
+  tags = {
+    Name = "tf_vpc"
+  }
+}
+
+resource "aws_security_group" "tf_public_sg" {
+  name        = "tf_public_sg"
+  description = "Used for access to the public instances"
+  vpc_id      = aws_vpc.tf_vpc.id
+
+  ingress {
+    from_port   = "22"
+    to_port     = "22"
+    protocol    = "tcp"
+    cidr_blocks = [
+      for num in var.subnet_numbers:
+      cidrsubnet(aws_vpc.tf_vpc.cidr_block, 8, num)
+    ]
+  }
+}
+```
+
+Initialize Terraform:
+```
+export AWS_ACCESS_KEY_ID="[ACCESS_KEY]"
+export AWS_SECRET_ACCESS_KEY="[SECRET_KEY]"
+export AWS_DEFAULT_REGION="us-east-1"
+terraform12 init
+```
+
+Plan the changes:
+```
+terraform12 plan
 ```
